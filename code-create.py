@@ -167,7 +167,7 @@ def aguardar_pronto(page, stab: float = 4.0, buf: float = 1.5):
                 fase_buf, t0 = True, now
             elif fase_buf and now - t0 >= stab:
                 return
-        time.sleep(20)
+        time.sleep(10)
 
 def digitar_prompt(page, prompt: str):
     for sel in ("textarea", "div[role='textbox']"):
@@ -226,21 +226,45 @@ def html_para_texto(html: str) -> str:
 
 # ---------- INSERE E VERIFICA NO DOCS -------------------------------
 def inserir_resposta(svc, doc_id: str, insert_at: int, texto_puro: str) -> int:
-    bloco = "\n\n" + texto_puro + "\n\n"
-    tam   = len(bloco)
-    svc.documents().batchUpdate(documentId=doc_id, body={
-        "requests": [
-            {"insertText": {"location": {"index": insert_at}, "text": bloco}},
-            {"updateTextStyle": {
-                "range": {"startIndex": insert_at, "endIndex": insert_at + tam},
-                "textStyle": {
-                    "weightedFontFamily": {"fontFamily": "Arial"},
-                    "fontSize": {"magnitude": 11, "unit": "PT"},
-                    "bold": False,
-                    "italic": False},
-                "fields": "weightedFontFamily,fontSize,bold,italic"}}
-        ]}).execute()
+    """
+    Insere a resposta logo após o prompt, com no máximo 1 linha de espaço.
+    • Move o ponto de inserção 1 caractere para trás (antes do '\n' do prompt).
+    • Adiciona APENAS 1 quebra de linha após o prompt e 1 no final da resposta.
+    • Fonte Arial 11 pt, cor preta, sem bold/itálico.
+    """
+    posicao = max(1, insert_at - 1)          # ← antes do '\n' do prompt
+    bloco   = "\n" + texto_puro       # ← 1 antes, 1 depois
+    tam     = len(bloco)
+
+    svc.documents().batchUpdate(
+        documentId=doc_id,
+        body={
+            "requests": [
+                {"insertText": {
+                    "location": {"index": posicao},
+                    "text": bloco
+                }},
+                {"updateTextStyle": {
+                    "range": {"startIndex": posicao, "endIndex": posicao + tam},
+                    "textStyle": {
+                        "weightedFontFamily": {"fontFamily": "Arial"},
+                        "fontSize": {"magnitude": 11, "unit": "PT"},
+                        "bold": False,
+                        "italic": False,
+                        "foregroundColor": {
+                            "color": {"rgbColor": {"red": 0, "green": 0, "blue": 0}}
+                        }
+                    },
+                    "fields": ("weightedFontFamily,fontSize,"
+                               "bold,italic,foregroundColor")
+                }}
+            ]
+        }
+    ).execute()
+
     return tam
+
+
 
 def doc_para_texto(svc, doc_id: str) -> str:
     partes = []
